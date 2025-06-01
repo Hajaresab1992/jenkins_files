@@ -1,57 +1,69 @@
-#!/bin/bash
+pipeline {
+    agent any
 
-# Exit immediately if a command exits with a non-zero status
-set -e
+    environment {
+        AWS_PROFILE = 's3_artifacts'  // Use your configured AWS CLI profile
+        S3_BUCKET = 'artifacts-pipeline-script'
+        REGION = 'ap-south-1'
+    }
 
-# Update package list
-sudo apt update -y
+    stages {
 
-# Install OpenJDK 21
-sudo apt install -y openjdk-21-jdk
+        stage('Stage-1: Clean Workspace') {
+            steps {
+                echo 'Cleaning workspace...'
+                cleanWs()
+            }
+        }
 
-# Add Jenkins repository and key to apt list
-sudo wget -O /usr/share/keyrings/jenkins-keyring.asc https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
-echo deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/ | sudo tee /etc/apt/sources.list.d/jenkins.list > /dev/null
+        stage('Stage-2: Git Clone') {
+            steps {
+                echo 'Cloning Git repository...'
+                git branch: 'main', url: 'https://github.com/Hajaresab1992/Uploading-artifacts-to-S3-Bucket-using-Jenkins.git'
+            }
+        }
 
-# Update package list and install Jenkins
-sudo apt update -y
-sudo apt install -y jenkins
+        stage('Stage-3: NPM Install') {
+            steps {
+                echo 'Installing NPM dependencies...'
+                sh 'npm install'
+            }
+        }
 
-# Add Jenkins user to sudoers without password prompt
-JENKINS_USER="jenkins"
-sudo usermod -aG sudo $JENKINS_USER
-echo "$JENKINS_USER ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/$JENKINS_USER
+        stage('Stage-4: Archive Artifact (tar.gz)') {
+            steps {
+                script {
+                    echo 'Archiving files...'
+                    sh """
+                        mkdir -p /tmp/archive
+                        rsync -av --exclude='.git' ./ /tmp/archive/
+                        tar -czvf artifact-${JOB_NAME}-${BUILD_NUMBER}-${BUILD_ID}.tar.gz -C /tmp/archive .
+                    """
+                }
+            }
+        }
 
-# Configure Jenkins URL to avoid slow loading of jenkins when ec2 machine public_ip changes
-cat << 'EOF' > "/home/ubuntu/jenkins_ip_url_update.sh"
-#!/bin/bash
-echo "<?xml version='1.1' encoding='UTF-8'?>
-<jenkins.model.JenkinsLocationConfiguration>
-  <jenkinsUrl>http://$(curl -s http://checkip.amazonaws.com):8080/</jenkinsUrl>
-</jenkins.model.JenkinsLocationConfiguration> " | sudo tee /var/lib/jenkins/jenkins.model.JenkinsLocationConfiguration.xml
-sudo systemctl restart jenkins
-EOF
+        stage('Stage-5: Upload Artifact to S3') {
+            steps {
+                echo 'Uploading artifact to S3...'
+               s3Upload(
+                  bucket: 'your-s3-bucket-name',
+                  path: 'your/s3/path/',
+                  file: 'your-local-file.txt',
+                  workingDir: '.',
+                  dontWaitForConcurrentBuildCompletion: true
+                    )
 
-chmod +x "/home/ubuntu/jenkins_ip_url_update.sh"
-# Restart Jenkins to apply configuration
-sudo systemctl restart jenkins
+            }
+        }
+    }
 
-# Add cron job to restart Jenkins daily at 2:30 AM
-CRON_JOB="@reboot sudo bash /home/ubuntu/jenkins_ip_url_update.sh"
-# Check if the cron job already exists, If not add the entry 
-
-echo $CRON_JOB
-# Initialize the crontab if it doesn't exist
-crontab -u ubuntu -l 2>/dev/null > mycron || touch mycron
-
-# Add your cron job
-echo "$CRON_JOB" >> mycron
-
-# Install the new crontab
-crontab -u ubuntu mycron
-
-# Clean up
-rm mycron
-
-
-
+    post {
+        success {
+            echo 'Pipeline completed successfully.'
+        }
+        failure {
+            echo 'Pipeline failed.'
+        }
+    }
+}
