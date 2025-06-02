@@ -19,14 +19,14 @@ pipeline {
         stage('Stage-2: Git Clone') {
             steps {
                 echo 'Cloning Git repository...'
-                git branch: 'main', url: 'https://github.com/Hajaresab1992/Uploading-artifacts-to-S3-Bucket-using-Jenkins.git'
+                git branch: 'main', url: '[https://github.com/Hajaresab1992/jenkins_files.git]'
             }
         }
 
-        stage('Stage-3: NPM Install') {
+        stage('Stage-3: MVN Install') {
             steps {
-                echo 'Installing NPM dependencies...'
-                sh 'npm install'
+                echo 'Installing MVN dependencies...'
+                sh 'mvn install'
             }
         }
 
