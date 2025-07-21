@@ -1,6 +1,8 @@
 pipeline {
     agent any
-
+    tools{
+        maven "Maven-3.9.11"
+    }
     environment {
         AWS_PROFILE = 's3_artifacts'  // Use your configured AWS CLI profile
         S3_BUCKET = 'artifacts-pipeline-script'
@@ -23,10 +25,10 @@ pipeline {
             }
         }
 
-        stage('Stage-3: MVN Install') {
+        stage('Stage-3: MVN Build') {
             steps {
-                echo 'Installing MVN dependencies...'
-                sh 'mvn install'
+                echo 'mvn packaging'
+                sh 'mvn clean package'
             }
         }
 
